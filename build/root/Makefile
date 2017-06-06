@@ -534,3 +534,14 @@ else
 bazel-release:
 	bazel build //build/release-tars
 endif
+
+ifeq ($(PRINT_HELP),y)
+define DOCKER_TEST_HELP_INFO
+endef
+docker-test:
+	echo "$$DOCKER_TEST_HELP_INFO"
+else
+docker-test:
+	docker build --tag k8s-test --file ./hack/docker/dev-dockerfile .
+	docker run --volume ${PWD}:/go/src/k8s.io/kubernetes k8s-test
+endif

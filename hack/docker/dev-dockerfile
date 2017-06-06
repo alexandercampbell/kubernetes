@@ -1,0 +1,71 @@
+# Copyright 2016 The Kubernetes Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+################################################################################
+# K8s Development Dockerfile                                                   #
+# 2017-06-06                                                                   #
+# alexanderhcampbell@gmail.com                                                 #
+################################################################################
+# Purpose: allow developers to run the K8s unit tests in a Docker container,   #
+# sidestepping many of the issues we have seen with inconsistent local         #
+# development environments.                                                    #
+################################################################################
+
+# Yes, we start from the openjdk image rather than the Golang image.
+# This is because we must use Bazel for our build & test process and it's
+# near-impossible to correctly install a recent version of Java on top of the
+# Golang base image.
+FROM openjdk:8
+
+# Install & setup Bazel
+RUN echo "deb [arch=amd64] http://storage.googleapis.com/bazel-apt stable jdk1.8" \
+	| tee /etc/apt/sources.list.d/bazel.list
+RUN curl https://bazel.build/bazel-release.pub.gpg | apt-key add -
+RUN apt-get update && apt-get install -y bazel make docker.io rsync
+# Bazel extracts itself on first run.
+RUN bazel version
+
+# Install & setup Go
+RUN curl -o go1.8.3.linux-amd64.tar.gz https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz
+RUN tar -C /usr/local -xzf go1.8.3.linux-amd64.tar.gz
+ENV GOROOT=/usr/local/go GOPATH=/go
+ENV PATH=$GOROOT/bin:$PATH
+
+# Install Golint (required by `make verify`)
+RUN go get -u -v github.com/golang/lint/golint
+
+# Trickery to prefetch the dependencies in BUILD.bazel in such a way that they
+# can be cached by Docker regardless of changes to the rest of the source tree.
+RUN mkdir -p /go/src/k8s.io/kubernetes
+WORKDIR /go/src/k8s.io/kubernetes
+COPY BUILD.bazel .
+COPY WORKSPACE   .
+RUN bazel fetch BUILD.bazel
+
+################################################################################
+# All development environment dependencies should be installed and configured
+# ABOVE this line. If you follow this rule, Docker will be able to cache
+# everything except the K8s source code.
+
+# It's up to the caller to ensure this points to the real, on-disk K8s
+# repository.
+COPY . /go/src/k8s.io/kubernetes
+WORKDIR /go/src/k8s.io/kubernetes
+
+# For some reason, this environment variable must be set. Otherwise, `make
+# bazel-test` crashes in a shell script somewhere under /hack/
+ENV KUBE_GIT_VERSION=kube-git-docker-test
+
+CMD make test
+

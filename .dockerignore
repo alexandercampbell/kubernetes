@@ -1,0 +1,13 @@
+.git/
+Dockerfile
+_tmp
+bazel-*
+doc_tmp
+kubernetes.tar.gz
+logo/
+third_party/pkg
+third_party/etcd
+third_party/etcd*
+_output/generated_html
+_output/local/go/pkg
+_output/local/go/bin
