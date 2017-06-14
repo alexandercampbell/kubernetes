@@ -195,7 +195,7 @@ func TestGenerateService(t *testing.T) {
 
 	tests := []struct {
 		port             string
-		args             []string
+		serviceName      string
 		serviceGenerator string
 		params           map[string]interface{}
 		expectErr        bool
@@ -205,7 +205,7 @@ func TestGenerateService(t *testing.T) {
 	}{
 		{
 			port:             "80",
-			args:             []string{"foo"},
+			serviceName:      "foo",
 			serviceGenerator: "service/v2",
 			params: map[string]interface{}{
 				"name": "foo",
@@ -235,7 +235,7 @@ func TestGenerateService(t *testing.T) {
 		},
 		{
 			port:             "80",
-			args:             []string{"foo"},
+			serviceName:      "foo",
 			serviceGenerator: "service/v2",
 			params: map[string]interface{}{
 				"name":   "foo",
@@ -272,7 +272,7 @@ func TestGenerateService(t *testing.T) {
 		},
 		{
 			port:             "80",
-			args:             []string{"foo"},
+			serviceName:      "foo",
 			serviceGenerator: "service/v2",
 			params: map[string]interface{}{
 				"name": "foo",
@@ -337,7 +337,9 @@ func TestGenerateService(t *testing.T) {
 		}
 
 		buff := &bytes.Buffer{}
-		err := generateService(f, cmd, test.args, test.serviceGenerator, test.params, "namespace", buff)
+		err := generateService(f, cmd, test.serviceName, test.serviceGenerator,
+			test.params, "namespace", buff)
+
 		if test.expectErr {
 			if err == nil {
 				t.Error("unexpected non-error")
