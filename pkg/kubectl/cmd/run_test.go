@@ -336,8 +336,10 @@ func TestGenerateService(t *testing.T) {
 			test.params["port"] = test.port
 		}
 
-		buff := &bytes.Buffer{}
-		err := generateService(f, cmd, test.serviceName, test.serviceGenerator,
+		options := new(runOptions)
+		buff := new(bytes.Buffer)
+		err := generateService(f, cmd, options,
+			test.serviceName, test.serviceGenerator,
 			test.params, "namespace", buff)
 
 		if test.expectErr {
@@ -365,7 +367,24 @@ func TestRunValidations(t *testing.T) {
 			expectedErr: "NAME is required",
 		},
 		{
+			// no image provided
 			args:        []string{"test"},
+			expectedErr: "requires exactly one image",
+		},
+		{
+			// two images provided
+			args: []string{"test"},
+			flags: map[string]string{
+				"image": "busybox,busybox2",
+			},
+			expectedErr: "requires exactly one image",
+		},
+		{
+			// image with a name that does not match the regex.
+			args: []string{"test"},
+			flags: map[string]string{
+				"image": "&&&&",
+			},
 			expectedErr: "Invalid image name",
 		},
 		{

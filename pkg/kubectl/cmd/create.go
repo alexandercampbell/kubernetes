@@ -244,6 +244,9 @@ type CreateSubcommandOptions struct {
 	DryRun bool
 	// OutputFormat
 	OutputFormat string
+
+	// ApplyAnnotations is the "--save-config" flag.
+	ApplyAnnotations bool
 }
 
 // RunCreateSubcommand executes a create subcommand using the specified options
@@ -279,7 +282,12 @@ func RunCreateSubcommand(f cmdutil.Factory, cmd *cobra.Command, out io.Writer, o
 	if err != nil {
 		return err
 	}
-	if err := kubectl.CreateOrUpdateAnnotation(cmdutil.GetFlagBool(cmd, cmdutil.ApplyAnnotationsFlag), info, f.JSONEncoder()); err != nil {
+
+	err = kubectl.CreateOrUpdateAnnotation(
+		options.ApplyAnnotations,
+		info, f.JSONEncoder(),
+	)
+	if err != nil {
 		return err
 	}
 	obj = info.Object

@@ -38,10 +38,56 @@ var (
     kubectl create deployment my-dep --image=busybox`))
 )
 
+////////////////////////////////////////////////////////////////////////////////
+// This block is unique because it contains structs and functions common to
+// `kubectl run` and `kubectl create deployment`.
+// See https://github.com/kubernetes/kubectl/issues/11 for discussion.
+////////////////////////////////////////////////////////////////////////////////
+
+// Describe the common subset of options.
+type DeploymentOptions struct {
+
+	// This struct contains a good portion of the options we need for a
+	// deployment, like DryRun.
+	CreateSubcommandOptions
+
+	Image []string
+}
+
+// Modify the FlagSet to include flags corresponding to the fields of
+// DeploymentOptions.
+func addDeploymentOptionsFlags(cmd *cobra.Command) {
+	// "inherit" the standard flags that go along with any command that
+	// might print an object after completion.
+	cmdutil.AddPrinterFlags(cmd)
+
+	// Add the --save-config flag.
+	cmdutil.AddApplyAnnotationFlags(cmd)
+
+	fs := cmd.Flags()
+	fs.StringSlice("image", []string{}, "Image name to run.")
+	cmd.MarkFlagRequired("image")
+}
+
+// Read the flags of cmd into a struct describing the standard options for
+// deployment.
+func readDeploymentOptions(cmd *cobra.Command) DeploymentOptions {
+	options := DeploymentOptions{}
+	options.OutputFormat = cmdutil.GetFlagString(cmd, "output")
+	options.DryRun = cmdutil.GetDryRunFlag(cmd)
+	options.Image = cmdutil.GetFlagStringSlice(cmd, "image")
+	options.ApplyAnnotations = cmdutil.GetFlagBool(cmd, cmdutil.ApplyAnnotationsFlag)
+
+	return options
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // NewCmdCreateDeployment is a macro command to create a new deployment.
 // This command is better known to users as `kubectl create deployment`.
 // Note that this command overlaps significantly with the `kubectl run` command.
 func NewCmdCreateDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer) *cobra.Command {
+
 	cmd := &cobra.Command{
 		Use:     "deployment NAME --image=image [--dry-run]",
 		Aliases: []string{"deploy"},
@@ -49,21 +95,24 @@ func NewCmdCreateDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer) *cobra.
 		Long:    deploymentLong,
 		Example: deploymentExample,
 		Run: func(cmd *cobra.Command, args []string) {
-			err := createDeployment(f, cmdOut, cmdErr, cmd, args)
+			options := readDeploymentOptions(cmd)
+			err := createDeployment(f, options, cmdOut, cmdErr, cmd, args)
 			cmdutil.CheckErr(err)
 		},
 	}
-	cmdutil.AddApplyAnnotationFlags(cmd)
+
+	addDeploymentOptionsFlags(cmd)
+
 	cmdutil.AddValidateFlags(cmd)
-	cmdutil.AddPrinterFlags(cmd)
 	cmdutil.AddGeneratorFlags(cmd, cmdutil.DeploymentBasicV1Beta1GeneratorName)
-	cmd.Flags().StringSlice("image", []string{}, "Image name to run.")
-	cmd.MarkFlagRequired("image")
 	return cmd
 }
 
-func createDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer, cmd *cobra.Command, args []string) error {
-	name, err := NameFromCommandArgs(cmd, args)
+func createDeployment(f cmdutil.Factory, options DeploymentOptions,
+	cmdOut, cmdErr io.Writer, cmd *cobra.Command, args []string) error {
+
+	var err error
+	options.Name, err = NameFromCommandArgs(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -85,19 +134,22 @@ func createDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer, cmd *cobra.Co
 			cmdutil.DeploymentBasicAppsV1Beta1GeneratorName, cmdutil.DeploymentBasicV1Beta1GeneratorName)
 		generatorName = cmdutil.DeploymentBasicV1Beta1GeneratorName
 	}
-	var generator kubectl.StructuredGenerator
+
 	switch generatorName {
 	case cmdutil.DeploymentBasicAppsV1Beta1GeneratorName:
-		generator = &kubectl.DeploymentBasicAppsGeneratorV1{Name: name, Images: cmdutil.GetFlagStringSlice(cmd, "image")}
+		options.StructuredGenerator = &kubectl.DeploymentBasicAppsGeneratorV1{
+			Name:   options.Name,
+			Images: options.Image,
+		}
 	case cmdutil.DeploymentBasicV1Beta1GeneratorName:
-		generator = &kubectl.DeploymentBasicGeneratorV1{Name: name, Images: cmdutil.GetFlagStringSlice(cmd, "image")}
+		options.StructuredGenerator = &kubectl.DeploymentBasicGeneratorV1{
+			Name:   options.Name,
+			Images: options.Image,
+		}
 	default:
 		return errUnsupportedGenerator(cmd, generatorName)
 	}
-	return RunCreateSubcommand(f, cmd, cmdOut, &CreateSubcommandOptions{
-		Name:                name,
-		StructuredGenerator: generator,
-		DryRun:              cmdutil.GetDryRunFlag(cmd),
-		OutputFormat:        cmdutil.GetFlagString(cmd, "output"),
-	})
+
+	return RunCreateSubcommand(f, cmd, cmdOut,
+		&options.CreateSubcommandOptions)
 }
