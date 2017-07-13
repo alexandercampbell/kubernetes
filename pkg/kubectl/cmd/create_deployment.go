@@ -60,6 +60,12 @@ func NewCmdCreateDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer) *cobra.
 	cmdutil.AddGeneratorFlags(cmd, cmdutil.DeploymentBasicV1Beta1GeneratorName)
 	cmd.Flags().StringSlice("image", []string{}, "Image name to run.")
 	cmd.MarkFlagRequired("image")
+
+	// Run flags that have been copy/pasted here temporarily.
+	// TODO: consolidate these to a single function called during the setup
+	// of both "create deployment" and "run".
+	cmd.Flags().StringP("labels", "l", "", "Labels to apply to the pod(s).")
+
 	return cmd
 }
 
@@ -99,6 +105,7 @@ func generatorFromName(
 	generatorName string,
 	imageNames []string,
 	deploymentName string,
+	labels string,
 ) (kubectl.StructuredGenerator, bool) {
 
 	switch generatorName {
@@ -106,12 +113,14 @@ func generatorFromName(
 		return &kubectl.DeploymentBasicAppsGeneratorV1{
 			Name:   deploymentName,
 			Images: imageNames,
+			Labels: labels,
 		}, true
 
 	case cmdutil.DeploymentBasicV1Beta1GeneratorName:
 		return &kubectl.DeploymentBasicGeneratorV1{
 			Name:   deploymentName,
 			Images: imageNames,
+			Labels: labels,
 		}, true
 	}
 
@@ -147,7 +156,9 @@ func createDeployment(f cmdutil.Factory, cmdOut, cmdErr io.Writer,
 	generatorName = fallbackGeneratorNameIfNecessary(generatorName, resourcesList, cmdErr)
 
 	imageNames := cmdutil.GetFlagStringSlice(cmd, "image")
-	generator, ok := generatorFromName(generatorName, imageNames, deploymentName)
+	labels := cmdutil.GetFlagString(cmd, "labels")
+
+	generator, ok := generatorFromName(generatorName, imageNames, deploymentName, labels)
 	if !ok {
 		return errUnsupportedGenerator(cmd, generatorName)
 	}
