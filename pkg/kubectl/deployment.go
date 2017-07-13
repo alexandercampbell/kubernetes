@@ -31,6 +31,11 @@ import (
 type DeploymentBasicGeneratorV1 struct {
 	Name   string
 	Images []string
+
+	// This is an optional parameter and can be left blank.
+	// NOTE: even when this parameter is blank, the "app" label will be set
+	// on the resulting deployment.
+	Labels string
 }
 
 // Ensure it supports the generator pattern that uses parameters specified during construction
@@ -40,6 +45,7 @@ func (DeploymentBasicGeneratorV1) ParamNames() []GeneratorParam {
 	return []GeneratorParam{
 		{"name", true},
 		{"image", true},
+		{"labels", false},
 	}
 }
 
@@ -50,13 +56,21 @@ func (s DeploymentBasicGeneratorV1) Generate(params map[string]interface{}) (run
 	}
 	name, isString := params["name"].(string)
 	if !isString {
-		return nil, fmt.Errorf("expected string, saw %v for 'name'", name)
+		return nil, fmt.Errorf("expected string, saw %#v for 'name'", name)
 	}
 	imageStrings, isArray := params["image"].([]string)
 	if !isArray {
-		return nil, fmt.Errorf("expected []string, found :%v", imageStrings)
+		return nil, fmt.Errorf("expected []string, saw %#v for 'image'", imageStrings)
 	}
-	delegate := &DeploymentBasicGeneratorV1{Name: name, Images: imageStrings}
+	labels, isString := params["labels"].(string)
+	if !isString {
+		return nil, fmt.Errorf("expected string, saw %#v for 'labels'", labels)
+	}
+	delegate := &DeploymentBasicGeneratorV1{
+		Name:   name,
+		Images: imageStrings,
+		Labels: labels,
+	}
 	return delegate.StructuredGenerate()
 }
 
@@ -80,9 +94,20 @@ func (s *DeploymentBasicGeneratorV1) StructuredGenerate() (runtime.Object, error
 		podSpec.Containers = append(podSpec.Containers, v1.Container{Name: name, Image: imageString})
 	}
 
-	// setup default label and selector
+	// Load labels from the parameters if any Labels were provided.
+	// Labels are optional.
+	var err error
 	labels := map[string]string{}
+	if len(s.Labels) > 0 {
+		labels, err = ParseLabels(s.Labels)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Setup default label
 	labels["app"] = s.Name
+
 	one := int32(1)
 	selector := metav1.LabelSelector{MatchLabels: labels}
 	deployment := extensionsv1beta1.Deployment{
@@ -119,6 +144,11 @@ func (s *DeploymentBasicGeneratorV1) validate() error {
 type DeploymentBasicAppsGeneratorV1 struct {
 	Name   string
 	Images []string
+
+	// This is an optional parameter and can be left blank.
+	// NOTE: even when this parameter is blank, the "app" label will be set
+	// on the resulting deployment.
+	Labels string
 }
 
 // Ensure it supports the generator pattern that uses parameters specified during construction
@@ -128,6 +158,7 @@ func (DeploymentBasicAppsGeneratorV1) ParamNames() []GeneratorParam {
 	return []GeneratorParam{
 		{"name", true},
 		{"image", true},
+		{"labels", false},
 	}
 }
 
@@ -138,13 +169,21 @@ func (s DeploymentBasicAppsGeneratorV1) Generate(params map[string]interface{}) 
 	}
 	name, isString := params["name"].(string)
 	if !isString {
-		return nil, fmt.Errorf("expected string, saw %v for 'name'", name)
+		return nil, fmt.Errorf("expected string, saw %#v for 'name'", name)
 	}
 	imageStrings, isArray := params["image"].([]string)
 	if !isArray {
-		return nil, fmt.Errorf("expected []string, found :%v", imageStrings)
+		return nil, fmt.Errorf("expected []string, saw %#v for 'image'", imageStrings)
 	}
-	delegate := &DeploymentBasicAppsGeneratorV1{Name: name, Images: imageStrings}
+	labels, isString := params["labels"].(string)
+	if !isString {
+		return nil, fmt.Errorf("expected string, saw %#v for 'labels'", labels)
+	}
+	delegate := &DeploymentBasicAppsGeneratorV1{
+		Name:   name,
+		Images: imageStrings,
+		Labels: labels,
+	}
 	return delegate.StructuredGenerate()
 }
 
@@ -168,9 +207,20 @@ func (s *DeploymentBasicAppsGeneratorV1) StructuredGenerate() (runtime.Object, e
 		podSpec.Containers = append(podSpec.Containers, v1.Container{Name: name, Image: imageString})
 	}
 
-	// setup default label and selector
+	// Load labels from the parameters if any Labels were provided.
+	// Labels are optional.
+	var err error
 	labels := map[string]string{}
+	if len(s.Labels) > 0 {
+		labels, err = ParseLabels(s.Labels)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Setup default label
 	labels["app"] = s.Name
+
 	one := int32(1)
 	selector := metav1.LabelSelector{MatchLabels: labels}
 	deployment := appsv1beta1.Deployment{
