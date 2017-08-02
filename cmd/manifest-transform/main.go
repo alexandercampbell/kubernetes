@@ -14,11 +14,16 @@ import (
 	"io/ioutil"
 	stdlog "log"
 	"os"
+	"path/filepath"
+	"strings"
 
-	v1beta1 "k8s.io/api/apps/v1beta1"
-	"k8s.io/api/core/v1"
-
+	"github.com/spf13/cobra"
 	yaml "gopkg.in/yaml.v1"
+
+	"k8s.io/api/apps/v1beta1"
+	"k8s.io/api/core/v1"
+	cmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
+	"k8s.io/kubernetes/pkg/kubectl/resource"
 )
 
 // Logger to stderr without the timestamp.
@@ -62,26 +67,29 @@ func loadJSON(filename string, i interface{}) error {
 	return json.Unmarshal(bytes, i)
 }
 
-func main() {
-	args := os.Args
-	if len(args) != 3 {
-		fmt.Println(`Usage: manifest-processor <manifest.yaml> <deployment.json>`)
-		os.Exit(1)
+func recursivelyFindAllJSONFiles(directoryName string) ([]string, error) {
+	fileInfos, err := ioutil.ReadDir(directoryName)
+	toRead := []string{}
+
+	exitIf(err != nil, "%v", err)
+	for _, info := range fileInfos {
+		if info.IsDir() {
+			pathToDirectory := filepath.Join(directoryName, info.Name())
+			nestedFiles, err := recursivelyFindAllJSONFiles(pathToDirectory)
+			if err != nil {
+				return nil, err
+			}
+			toRead = append(toRead, nestedFiles...)
+		} else if strings.HasSuffix(info.Name(), ".json") {
+			toRead = append(toRead, filepath.Join(directoryName, info.Name()))
+		}
 	}
 
-	// Read Manifest
-	var manifest Manifest
-	exitIf(loadYAML(args[1], &manifest) != nil, "couldn't load manifest file")
-	log.Printf("Loaded YAML manifest from %q", args[1])
-	exitIf(manifest.Kind != "Overlay", "unsupported manifest kind %q", manifest.Kind)
-	exitIf(manifest.APIVersion != SupportedAPIVersion, "unsupported API version %q", manifest.APIVersion)
+	return toRead, nil
+}
 
-	// Read Deployment
-	var deployment v1beta1.Deployment
-	exitIf(loadJSON(args[2], &deployment) != nil, "couldn't load deployment file")
-	log.Printf("Loaded deployment from %q", args[2])
-	exitIf(manifest.ObjectMeta.Name != deployment.ObjectMeta.Name, "Name mismatch (manifest=%q, deploy=%q)",
-		manifest.ObjectMeta.Name, deployment.ObjectMeta.Name)
+func applyManifestTransformsToDeployment(manifest Manifest,
+	deployment *v1beta1.Deployment) {
 
 	// Add the name prefix and the custom labels to the deployment.
 	log.Println("Manifest name matches deployment name. Applying changes...")
@@ -96,6 +104,52 @@ func main() {
 	}
 
 	log.Println("Manifest transforms complete.")
+	return nil
+}
+
+func main() {
+	cmd := &cobra.Command{
+		Use: "manifest-processor resources-directory/",
+		Run: func(cmd *cobra.Command, args []string) {
+			if len(args) != 1 {
+				cmd.Usage()
+				return
+			}
+			dirName := args[0]
+
+			var manifest Manifest
+			manifestPath := filepath.Join(dirName, "manifest.yaml")
+			exitIf(loadYAML(manifestPath, &manifest) != nil, "couldn't load manifest file")
+			log.Printf("Loaded YAML manifest from %q", manifestPath)
+			exitIf(manifest.Kind != "Overlay", "unsupported manifest kind %q", manifest.Kind)
+			exitIf(manifest.APIVersion != SupportedAPIVersion,
+				"unsupported API version %q", manifest.APIVersion)
+
+			toRead, err := recursivelyFindAllJSONFiles(dirName)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("%+v\n", toRead)
+
+			for _, filename := range toRead {
+				// Read Deployment
+				var deployment v1beta1.Deployment
+				err := loadJSON(filename, &deployment)
+				exitIf(err != nil, "couldn't load deployment file %q: %v", filename, err)
+				log.Printf("Loaded deployment from %q", args[2])
+				exitIf(manifest.ObjectMeta.Name != deployment.ObjectMeta.Name,
+					"Name mismatch (manifest=%q, deploy=%q)",
+					manifest.ObjectMeta.Name, deployment.ObjectMeta.Name)
+			}
+		},
+	}
+	var filenameOptions resource.FilenameOptions
+	cmdutil.AddFilenameOptionFlags(cmd, &filenameOptions, "")
+
+	err := cmd.Execute()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Print the transformed Deployment.
 	bytes, err := json.MarshalIndent(deployment, "", "    ")
