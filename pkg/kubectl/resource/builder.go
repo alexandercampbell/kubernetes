@@ -132,7 +132,7 @@ func (b *Builder) FilenameParam(enforceNamespace bool, filenameOptions *Filename
 		switch {
 		case s == "-":
 			b.Stdin()
-		case strings.Index(s, "http://") == 0 || strings.Index(s, "https://") == 0:
+		case strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://"):
 			url, err := url.Parse(s)
 			if err != nil {
 				b.errs = append(b.errs, fmt.Errorf("the URL passed to filename %q is not valid: %v", s, err))
