@@ -135,7 +135,7 @@ func (b *Builder) FilenameParam(enforceNamespace bool, filenameOptions *Filename
 		case strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://"):
 			url, err := url.Parse(s)
 			if err != nil {
-				b.errs = append(b.errs, fmt.Errorf("the URL passed to filename %q is not valid: %v", s, err))
+				b.errs = append(b.errs, fmt.Errorf("URL %q is not valid: %v", s, err))
 				continue
 			}
 			b.URL(defaultHttpGetAttempts, url)
