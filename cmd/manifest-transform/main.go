@@ -104,7 +104,6 @@ func applyManifestTransformsToDeployment(manifest Manifest,
 	}
 
 	log.Println("Manifest transforms complete.")
-	return nil
 }
 
 func main() {
@@ -136,10 +135,15 @@ func main() {
 				var deployment v1beta1.Deployment
 				err := loadJSON(filename, &deployment)
 				exitIf(err != nil, "couldn't load deployment file %q: %v", filename, err)
-				log.Printf("Loaded deployment from %q", args[2])
+				log.Printf("Loaded deployment from %q", filename)
 				exitIf(manifest.ObjectMeta.Name != deployment.ObjectMeta.Name,
 					"Name mismatch (manifest=%q, deploy=%q)",
 					manifest.ObjectMeta.Name, deployment.ObjectMeta.Name)
+
+				// Print the transformed Deployment.
+				bytes, err := json.MarshalIndent(deployment, "", "    ")
+				exitIf(err != nil, "unable to marshal deployment")
+				fmt.Printf("\n%s\n", bytes)
 			}
 		},
 	}
@@ -150,9 +154,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Print the transformed Deployment.
-	bytes, err := json.MarshalIndent(deployment, "", "    ")
-	exitIf(err != nil, "unable to marshal deployment")
-	fmt.Printf("\n%s\n", bytes)
 }
