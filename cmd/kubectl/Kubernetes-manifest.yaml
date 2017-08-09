@@ -1,0 +1,30 @@
+apiVersion: manifest.k8s.io/v1alpha1
+kind: Overlay
+metadata:
+  name: hello-world
+description: Mungebot config for test-infra repo
+namePrefix: test-infra-
+labels:
+  org: kubernetes
+  repo: test-infra
+annotations:
+  note: This is my first try
+bases:
+- ../../package
+#These are strategic merge patch overlays in the form of API resources
+resources:
+- deployment.yaml
+#There could also be configmaps in Base, which would make these overlays
+configmaps:
+- type: env
+  name: app-env
+  file: app.env
+- type: file
+  name: app-config
+  file: app-init.ini
+#There could be secrets in Base, if just using a fork/rebase workflow
+secrets:
+- type: tls
+  certFile: tls.cert
+  keyFile: tls.key
+recursive: false

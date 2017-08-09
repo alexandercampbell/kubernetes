@@ -56,7 +56,9 @@ type ApplyOptions struct {
 	GracePeriod     int
 	PruneResources  []pruneResource
 	Timeout         time.Duration
-	cmdBaseName     string
+
+	searchForManifest bool
+	cmdBaseName       string
 }
 
 const (
@@ -95,8 +97,11 @@ var (
 	warningNoLastAppliedConfigAnnotation = "Warning: %[1]s apply should be used on resource created by either %[1]s create --save-config or %[1]s apply\n"
 )
 
-func NewCmdApply(baseName string, f cmdutil.Factory, out, errOut io.Writer) *cobra.Command {
+func NewCmdApply(baseName string, f cmdutil.Factory, out, errOut io.Writer,
+	searchForManifest bool) *cobra.Command {
+
 	var options ApplyOptions
+	options.searchForManifest = searchForManifest
 
 	// Store baseName for use in printing warnings / messages involving the base command name.
 	// This is useful for downstream command that wrap this one.
@@ -221,6 +226,7 @@ func RunApply(f cmdutil.Factory, cmd *cobra.Command, out, errOut io.Writer, opti
 		FilenameParam(enforceNamespace, &options.FilenameOptions).
 		SelectorParam(options.Selector).
 		Flatten().
+		SearchForManifest(options.searchForManifest).
 		Do()
 	err = r.Err()
 	if err != nil {

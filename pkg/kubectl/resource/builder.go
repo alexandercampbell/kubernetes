@@ -19,6 +19,7 @@ package resource
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -50,6 +51,12 @@ type Builder struct {
 	paths  []Visitor
 	stream bool
 	dir    bool
+
+	// searchForManifest: when true, Builder will search for a file named
+	// "Kubernetes-manifest.yaml" and use that manifest to transform the
+	// paths that it sees. This value is only true for the 'kubectl
+	// apply-manifest' command.
+	searchForManifest bool
 
 	selector  labels.Selector
 	selectAll bool
@@ -116,6 +123,11 @@ func NewBuilder(mapper meta.RESTMapper, categoryExpander CategoryExpander, typer
 
 func (b *Builder) Schema(schema validation.Schema) *Builder {
 	b.schema = schema
+	return b
+}
+
+func (b *Builder) SearchForManifest(searchForManifest bool) *Builder {
+	b.searchForManifest = searchForManifest
 	return b
 }
 
@@ -311,7 +323,9 @@ func (b *Builder) RequireNamespace() *Builder {
 	return b
 }
 
-// SelectEverythingParam
+// SelectAllParam instructs the builder to select everything. An error will be
+// added to the Builder's error list if there is already a Selector specified on
+// this Builder.
 func (b *Builder) SelectAllParam(selectAll bool) *Builder {
 	if selectAll && b.selector != nil {
 		b.errs = append(b.errs, fmt.Errorf("setting 'all' parameter but found a non empty selector. "))
@@ -813,10 +827,33 @@ func (b *Builder) Do() *Result {
 	if b.requireObject {
 		helpers = append(helpers, RetrieveLazy)
 	}
+
+	// Load the Manifest if searchForManifest is true.
+	if b.searchForManifest {
+		// look in the current directory
+		manifest, err := loadManifest(manifestFilename)
+		if err != nil {
+			return &Result{err: fmt.Errorf("couldn't load manifest: %v", err)}
+		}
+
+		log.Printf("Loaded manifest from %q", manifestFilename)
+		log.Printf("Manifest: %+v", manifest)
+
+		manifestTransformer := func(info *Info, err error) error {
+			if err != nil {
+				return err
+			}
+			return applyManifestToResource(manifest, info.Object)
+		}
+
+		helpers = append(helpers, manifestTransformer)
+	}
+
 	r.visitor = NewDecoratedVisitor(r.visitor, helpers...)
 	if b.continueOnError {
 		r.visitor = ContinueOnErrorVisitor{r.visitor}
 	}
+
 	return r
 }
 
