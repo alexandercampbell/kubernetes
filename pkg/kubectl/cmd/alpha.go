@@ -35,10 +35,11 @@ func NewCmdAlpha(f cmdutil.Factory, in io.Reader, out, err io.Writer) *cobra.Com
 	}
 
 	// Alpha commands should be added here. As features graduate from alpha they should move
-	// from here to the CommandGroups defined by NewKubeletCommand() in cmd.go.
+	// from here to the CommandGroups defined by NewKubectlCommand() in cmd.go.
 	//cmd.AddCommand(NewCmdDebug(f, in, out, err))
+	cmd.AddCommand(NewCmdApplyManifest("kubectl", f, out, err))
 
-	// NewKubeletCommand() will hide the alpha command if it has no subcommands. Overriding
+	// NewKubectlCommand() will hide the alpha command if it has no subcommands. Overriding
 	// the help function ensures a reasonable message if someone types the hidden command anyway.
 	if !cmd.HasSubCommands() {
 		cmd.SetHelpFunc(func(*cobra.Command, []string) {

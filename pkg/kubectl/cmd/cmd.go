@@ -339,7 +339,6 @@ func NewKubectlCommand(f cmdutil.Factory, in io.Reader, out, err io.Writer) *cob
 			Message: "Advanced Commands:",
 			Commands: []*cobra.Command{
 				NewCmdApply("kubectl", f, out, err, false),
-				NewCmdApplyManifest("kubectl", f, out, err),
 				NewCmdPatch(f, out),
 				NewCmdReplace(f, out),
 				deprecatedAlias("update", NewCmdReplace(f, out)),
