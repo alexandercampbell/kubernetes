@@ -19,10 +19,11 @@ package resource
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/golang/glog"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -830,17 +831,16 @@ func (b *Builder) Do() *Result {
 
 	// Load the Manifest if searchForManifest is true.
 	if b.searchForManifest {
-		// look in the current directory
 		manifest, err := loadManifest(manifestFilename)
 		if err != nil {
 			return &Result{err: fmt.Errorf("couldn't load manifest: %v", err)}
 		}
-
-		log.Printf("Loaded manifest from %q", manifestFilename)
-		log.Printf("Manifest: %+v", manifest)
+		glog.V(5).Infof("Loaded manifest from %q", manifestFilename)
 
 		manifestTransformer := func(info *Info, err error) error {
 			if err != nil {
+				// if there's already an error we should just
+				// return it.
 				return err
 			}
 			return applyManifestToResource(manifest, info.Object)

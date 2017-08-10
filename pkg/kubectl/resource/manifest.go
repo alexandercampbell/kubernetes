@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
-	"os"
+
+	"github.com/golang/glog"
 
 	yaml "gopkg.in/yaml.v1"
 
 	"k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -53,43 +55,54 @@ func applyManifestTransformsToDeployment(manifest Manifest,
 }
 
 func applyManifestToResource(manifest *Manifest, object runtime.Object) error {
+	v5 := glog.V(5)
 	// Somehow the object that gets passed in here is of concrete type
 	// (*unstructured.Unstructured).
 	// This is not useful.
-	// I need to be able to access the label fields and so on.
-	// How can I get the Unstructured object transformed into the
-	// appropriate extensionsv1beta1.Deployment type?
-	log.Printf("object type: %T", object)
+	v5.Infof("object type: %T", object)
 
-	// well I can try marshalling to JSON and back
-	// WEW this is bad code
-	var deployment extensionsv1beta1.Deployment
-	bytes, _ := json.MarshalIndent(object, "", "     ")
-	if err := json.Unmarshal(bytes, &deployment); err != nil {
-		panic(err)
+	// After discussing with Phil yesterday I know the best way to solve
+	// this is just to walk the JSON fields of the object as they are right
+	// now.
+	unstructured, ok := object.(*unstructured.Unstructured)
+	if !ok {
+		v5.Info("could not cast runtime.Object to unstructured.Unstructured")
+		return nil
 	}
 
-	// alright thanks to some shenanigans I've got ahold of a Deployment
-	// object. Time to apply the manifest.
-	applyManifestTransformsToDeployment(*manifest, &deployment)
+	// left the type in here for clarity on what is going on.
+	var topLevelFields map[string]interface{}
+	topLevelFields = unstructured.Object
 
-	// Since we did some hacks to get the Deployment I can't exactly put it
-	// back into the runtime.Object. So for now I will settle for printing
-	// the new object.
-	log.Printf("Put the name prefix on the deployment:")
-	bytes, _ = json.MarshalIndent(deployment, "", "     ")
-	log.Printf("%s\n", bytes)
+	// Check that the type is what we expect.
+	apiVersion, ok := topLevelFields["apiVersion"].(string)
+	if !ok || apiVersion != "extensions/v1beta1" {
+		return nil
+	}
+	kind, ok := topLevelFields["kind"].(string)
+	if !ok || kind != "Deployment" {
+		return nil
+	}
 
-	os.Exit(0)
+	// Load the metadata and update the metadata.name field to include the
+	// manifest's NamePrefix.
+	metadata, ok := topLevelFields["metadata"].(map[string]interface{})
+	if !ok {
+		v5.Info("could not access 'metadata' field as map[string]interface{} in object")
+		return nil
+	}
+	metadataName, ok := metadata["name"].(string)
+	if !ok {
+		glog.V(5).Info("could not find 'name' field in object metadata")
+		return nil
+	}
+	metadataName = manifest.NamePrefix + metadataName
+	v5.Infof("new metadata.name: %q", metadataName)
+	unstructured.Object["metadata"].(map[string]interface{})["name"] = metadataName
 
-	// Type switch would be nice here but as noted above the concrete type
-	// is wrong.
-	/*
-		switch v := object.(type) {
-		case :
-			log.Printf("saw Deployment %v", v)
-		}
-	*/
+	// debugging
+	bytes, _ := json.MarshalIndent(object, "", "\t")
+	v5.Infof("%s", bytes)
 
 	return nil
 }
